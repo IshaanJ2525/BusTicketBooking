@@ -6,7 +6,7 @@ import base64
 import requests
 
 # --- GitHub Configuration ---
-GITHUB_TOKEN = st.secrets["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"]
+GITHUB_TOKEN = st.secrets["11A5B7JYY0kt0hsFAZdXHM_hBJIwW744Yoo3mCFAtj8C7BkBapOrl0vaGFpMLqAtJNFIFRQL7DuUnZPswr"]
 GITHUB_USERNAME = st.secrets["IshaanJ2525"]
 GITHUB_REPO = st.secrets["BusTicketBooking"]
 GITHUB_FILEPATH = "data/blockchain.json"  # Path where you want to store the file in the repo
