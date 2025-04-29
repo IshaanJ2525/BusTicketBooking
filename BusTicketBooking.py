@@ -5,97 +5,104 @@ import json
 import base64
 import requests
 
-# --- GitHub Configuration from Streamlit Secrets ---
+# --- GitHub Config ---
 GITHUB_TOKEN = st.secrets["GITHUB_TOKEN"]
 GITHUB_USERNAME = st.secrets["GITHUB_USERNAME"]
 GITHUB_REPO = st.secrets["GITHUB_REPO"]
-GITHUB_FILEPATH = "data/blockchain.json"  # Path in repo
+GITHUB_FILEPATH = "blockchain.json"
 
-# --- Blockchain Classes ---
-
+# --- Blockchain Model ---
 class Block:
     def __init__(self, timestamp, data, previous_hash, hash_val=None):
         self.timestamp = timestamp
         self.data = data
         self.previous_hash = previous_hash
-        self.hash = hash_val or self.get_hash()
+        self.hash = hash_val or self.calculate_hash()
 
-    def get_hash(self):
-        content = self.timestamp + json.dumps(self.data) + self.previous_hash
-        return hashlib.sha256(content.encode()).hexdigest()
+    def calculate_hash(self):
+        block_string = self.timestamp + json.dumps(self.data) + self.previous_hash
+        return hashlib.sha256(block_string.encode()).hexdigest()
 
     def to_dict(self):
         return {
             "timestamp": self.timestamp,
             "data": self.data,
             "previous_hash": self.previous_hash,
-            "hash": self.hash
+            "hash": self.hash,
         }
 
     @staticmethod
-    def from_dict(d):
-        return Block(d["timestamp"], d["data"], d["previous_hash"], d["hash"])
+    def from_dict(data):
+        return Block(data["timestamp"], data["data"], data["previous_hash"], data["hash"])
 
-# --- GitHub Save/Load Functions ---
-
-def push_to_github(content_str):
+# --- GitHub Functions ---
+def get_github_file():
     url = f"https://api.github.com/repos/{GITHUB_USERNAME}/{GITHUB_REPO}/contents/{GITHUB_FILEPATH}"
     headers = {"Authorization": f"token {GITHUB_TOKEN}"}
-
-    # Get current file SHA if it exists
     r = requests.get(url, headers=headers)
-    sha = r.json().get("sha") if r.status_code == 200 else None
+    if r.status_code == 200:
+        content = base64.b64decode(r.json()["content"]).decode()
+        sha = r.json()["sha"]
+        return json.loads(content), sha
+    else:
+        return None, None
 
-    data = {
-        "message": "Update blockchain data",
-        "content": base64.b64encode(content_str.encode()).decode(),
+def update_github_file(data_json, sha=None):
+    url = f"https://api.github.com/repos/{GITHUB_USERNAME}/{GITHUB_REPO}/contents/{GITHUB_FILEPATH}"
+    headers = {"Authorization": f"token {GITHUB_TOKEN}"}
+    content_encoded = base64.b64encode(data_json.encode()).decode()
+
+    payload = {
+        "message": "Update blockchain",
+        "content": content_encoded,
         "branch": "main"
     }
     if sha:
-        data["sha"] = sha
+        payload["sha"] = sha
 
-    r = requests.put(url, headers=headers, json=data)
+    r = requests.put(url, headers=headers, json=payload)
     return r.status_code in [200, 201]
 
-def load_from_github():
-    url = f"https://raw.githubusercontent.com/{GITHUB_USERNAME}/{GITHUB_REPO}/main/{GITHUB_FILEPATH}"
-    r = requests.get(url)
-    if r.status_code == 200:
-        blocks = json.loads(r.text)
-        return [Block.from_dict(b) for b in blocks]
+# --- Load Blockchain ---
+def load_blockchain():
+    data, _ = get_github_file()
+    if data:
+        return [Block.from_dict(b) for b in data]
     else:
+        # Create Genesis block
         genesis = Block(str(datetime.datetime.now()), "Genesis Block", "0")
         return [genesis]
 
-# --- Blockchain Initialization ---
-if "chain" not in st.session_state:
-    st.session_state.chain = load_from_github()
+# --- Streamlit UI ---
+st.title("🚌 Bus Ticket Booking on Blockchain (GitHub Synced)")
 
-# --- UI ---
-st.title("🚌 Bus Ticket Booking with Blockchain (GitHub-Synced)")
+if "blockchain" not in st.session_state:
+    st.session_state.blockchain = load_blockchain()
 
-name = st.text_input("Enter your name:")
-route = st.selectbox("Select your route:", ["A to B", "B to C", "A to C"])
-tickets = st.number_input("Number of tickets:", min_value=1, max_value=5, step=1)
+name = st.text_input("Enter your name")
+route = st.selectbox("Select your route", ["A to B", "B to C", "A to C"])
+tickets = st.number_input("Number of tickets", min_value=1, max_value=5, step=1)
 
-if st.button("🎟 Book Ticket"):
-    if name.strip() == "":
-        st.warning("Please enter your name.")
+if st.button("Book Ticket"):
+    if not name.strip():
+        st.error("Please enter your name.")
     else:
         data = {"name": name, "route": route, "tickets": tickets}
-        prev_hash = st.session_state.chain[-1].hash
+        previous_hash = st.session_state.blockchain[-1].hash
         timestamp = str(datetime.datetime.now())
-        new_block = Block(timestamp, data, prev_hash)
-        st.session_state.chain.append(new_block)
+        new_block = Block(timestamp, data, previous_hash)
+        st.session_state.blockchain.append(new_block)
 
-        blockchain_json = json.dumps([b.to_dict() for b in st.session_state.chain], indent=2)
-        if push_to_github(blockchain_json):
-            st.success("✅ Ticket booked and blockchain updated on GitHub.")
+        # Save to GitHub
+        json_data = json.dumps([b.to_dict() for b in st.session_state.blockchain], indent=2)
+        _, current_sha = get_github_file()
+        if update_github_file(json_data, sha=current_sha):
+            st.success("✅ Ticket booked and blockchain updated!")
         else:
-            st.error("❌ Failed to update blockchain on GitHub.")
+            st.error("❌ Failed to update GitHub file.")
 
-# --- Blockchain Display ---
+# --- Show Blockchain ---
 st.subheader("📜 Blockchain Ledger")
-for i, block in enumerate(st.session_state.chain):
-    st.markdown(f"**Block {i}**")
+for idx, block in enumerate(st.session_state.blockchain):
+    st.markdown(f"**Block {idx}**")
     st.json(block.to_dict())
