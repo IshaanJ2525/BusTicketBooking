@@ -6,9 +6,9 @@ import base64
 import requests
 
 # --- GitHub Configuration from Streamlit Secrets ---
-GITHUB_TOKEN = st.secrets["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"]
-GITHUB_USERNAME = st.secrets["IshaanJ2525"]
-GITHUB_REPO = st.secrets["BusTicketBooking"]
+GITHUB_TOKEN = st.secrets["GITHUB_TOKEN"]
+GITHUB_USERNAME = st.secrets["GITHUB_USERNAME"]
+GITHUB_REPO = st.secrets["GITHUB_REPO"]
 GITHUB_FILEPATH = "data/blockchain.json"  # Path in repo
 
 # --- Blockchain Classes ---
